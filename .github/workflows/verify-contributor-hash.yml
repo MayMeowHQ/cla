@@ -1,0 +1,42 @@
+name: Verify Contributor Hash
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - contributors.json
+      - contributors.txt
+      - .github/workflows/verify-contributor-hash.yml
+      - .github/scripts/**
+
+jobs:
+  cla-hash-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute expected hash
+        id: expected
+        run: |
+          set -euo pipefail
+          username='${{ github.event.pull_request.user.login }}'
+          echo "username=$username" >> "$GITHUB_OUTPUT"
+          expected=$(printf "%s" "$username" | sha256sum | awk '{print $1}')
+          echo "hash=$expected" >> "$GITHUB_OUTPUT"
+
+      - name: Validate contributor hashes
+        env:
+          EXPECTED_HASH: ${{ steps.expected.outputs.hash }}
+          PR_USERNAME: ${{ steps.expected.outputs.username }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_REF" --depth=1
+          python3 .github/scripts/verify_hash.py
